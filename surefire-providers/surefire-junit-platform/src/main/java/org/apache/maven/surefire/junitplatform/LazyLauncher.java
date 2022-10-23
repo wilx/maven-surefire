@@ -21,6 +21,7 @@ package org.apache.maven.surefire.junitplatform;
 
 import org.apache.maven.surefire.api.util.ReflectionUtils;
 import org.junit.platform.launcher.Launcher;
+import org.junit.platform.launcher.LauncherDiscoveryListener;
 import org.junit.platform.launcher.LauncherDiscoveryRequest;
 import org.junit.platform.launcher.TestExecutionListener;
 import org.junit.platform.launcher.TestPlan;
@@ -53,6 +54,18 @@ class LazyLauncher implements Launcher, AutoCloseable
                          TestExecutionListener... testExecutionListeners )
     {
         launcher().execute( launcherDiscoveryRequest, testExecutionListeners );
+    }
+
+    @Override
+    public void execute( TestPlan testPlan, TestExecutionListener... listeners )
+    {
+        launcher().execute( testPlan, listeners );
+    }
+
+    @Override
+    public void registerLauncherDiscoveryListeners( LauncherDiscoveryListener... listeners )
+    {
+        launcher().registerLauncherDiscoveryListeners( listeners );
     }
 
     private Launcher launcher()
