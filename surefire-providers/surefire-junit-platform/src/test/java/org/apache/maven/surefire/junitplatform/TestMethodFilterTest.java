@@ -28,12 +28,16 @@ import static org.mockito.Mockito.when;
 import java.lang.reflect.Method;
 
 import org.apache.maven.surefire.api.testset.TestListResolver;
+import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.DisplayNameGenerator;
+import org.junit.jupiter.engine.config.JupiterConfiguration;
 import org.junit.jupiter.engine.descriptor.ClassTestDescriptor;
 import org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor;
 import org.junit.platform.engine.ConfigurationParameters;
 import org.junit.platform.engine.FilterResult;
 import org.junit.platform.engine.UniqueId;
+import org.mockito.Mockito;
 
 /**
  * Unit tests for {@link TestMethodFilter}.
@@ -44,9 +48,18 @@ public class TestMethodFilterTest
 {
     private static final ConfigurationParameters CONFIG_PARAMS = mock( ConfigurationParameters.class );
 
+    private static final JupiterConfiguration JUPITER_CONFIG = mock( JupiterConfiguration.class );
+
     private final TestListResolver resolver = mock( TestListResolver.class );
 
     private final TestMethodFilter filter = new TestMethodFilter( this.resolver );
+
+    @BeforeClass
+    public static void beforeClasss()
+    {
+        Mockito.when( JUPITER_CONFIG.getDefaultDisplayNameGenerator() )
+            .thenReturn( new DisplayNameGenerator.Standard() );
+    }
 
     @Test
     public void includesBasedOnTestListResolver()
@@ -87,13 +100,13 @@ public class TestMethodFilterTest
         UniqueId uniqueId = UniqueId.forEngine( "method" );
         Class<TestClass> testClass = TestClass.class;
         Method testMethod = testClass.getMethod( "testMethod" );
-        return new TestMethodTestDescriptor( uniqueId, testClass, testMethod );
+        return new TestMethodTestDescriptor( uniqueId, testClass, testMethod, JUPITER_CONFIG );
     }
 
     private static ClassTestDescriptor newClassTestDescriptor()
     {
         UniqueId uniqueId = UniqueId.forEngine( "class" );
-        return new ClassTestDescriptor( uniqueId, TestClass.class, CONFIG_PARAMS );
+        return new ClassTestDescriptor( uniqueId, TestClass.class, JUPITER_CONFIG );
     }
 
     /**
