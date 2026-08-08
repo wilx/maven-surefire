@@ -99,20 +99,26 @@ public class EventChannelEncoder extends EventEncoder implements MasterProcessCh
 
     void encodeSystemProperties(Map<String, String> sysProps, RunMode runMode, Long testRunId) {
         CharsetEncoder encoder = newCharsetEncoder();
-        ByteBuffer result = null;
-        for (Iterator<Entry<String, String>> it = sysProps.entrySet().iterator(); it.hasNext(); ) {
-            Entry<String, String> entry = it.next();
-            String key = entry.getKey();
-            String value = entry.getValue();
+        try {
+            ByteBuffer result = null;
+            for (Iterator<Entry<String, String>> it = sysProps.entrySet().iterator(); it.hasNext(); ) {
+                Entry<String, String> entry = it.next();
+                String key = entry.getKey();
+                String value = entry.getValue();
 
-            int bufferLength =
-                    estimateBufferLength(BOOTERCODE_SYSPROPS.getOpcode().length(), runMode, encoder, 0, 1, key, value);
-            result = result != null && result.capacity() >= bufferLength ? result : ByteBuffer.allocate(bufferLength);
-            ((Buffer) result).clear();
-            // :maven-surefire-event:sys-prop:<runMode>:<testRunId>:UTF-8:<integer>:<key>:<integer>:<value>:
-            encode(encoder, result, BOOTERCODE_SYSPROPS, runMode, testRunId, key, value);
-            boolean sync = !it.hasNext();
-            write(result, sync);
+                int bufferLength = estimateBufferLength(
+                        BOOTERCODE_SYSPROPS.getOpcode().length(), runMode, encoder, 0, 1, key, value);
+                result = result != null && result.capacity() >= bufferLength
+                        ? result
+                        : ByteBuffer.allocate(bufferLength);
+                ((Buffer) result).clear();
+                // :maven-surefire-event:sys-prop:<runMode>:<testRunId>:UTF-8:<integer>:<key>:<integer>:<value>:
+                encode(encoder, result, BOOTERCODE_SYSPROPS, runMode, testRunId, key, value);
+                boolean sync = !it.hasNext();
+                write(result, sync);
+            }
+        } finally {
+            returnCharsetEncoder(encoder);
         }
     }
 
@@ -193,14 +199,18 @@ public class EventChannelEncoder extends EventEncoder implements MasterProcessCh
     @Override
     public void consoleErrorLog(String message, Throwable t) {
         CharsetEncoder encoder = newCharsetEncoder();
-        String stackTrace = t == null ? null : ConsoleLoggerUtils.toString(t);
-        int bufferMaxLength = estimateBufferLength(
-                BOOTERCODE_CONSOLE_ERROR.getOpcode().length(), null, encoder, 0, 0, message, null, stackTrace);
-        ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
-        encodeHeader(result, BOOTERCODE_CONSOLE_ERROR);
-        encodeCharset(result);
-        encode(encoder, result, message, null, stackTrace);
-        write(result, true);
+        try {
+            String stackTrace = t == null ? null : ConsoleLoggerUtils.toString(t);
+            int bufferMaxLength = estimateBufferLength(
+                    BOOTERCODE_CONSOLE_ERROR.getOpcode().length(), null, encoder, 0, 0, message, null, stackTrace);
+            ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
+            encodeHeader(result, BOOTERCODE_CONSOLE_ERROR);
+            encodeCharset(result);
+            encode(encoder, result, message, null, stackTrace);
+            write(result, true);
+        } finally {
+            returnCharsetEncoder(encoder);
+        }
     }
 
     @Override
@@ -246,22 +256,26 @@ public class EventChannelEncoder extends EventEncoder implements MasterProcessCh
             ForkedProcessEventType eventType,
             @SuppressWarnings("SameParameterValue") boolean sync) {
         CharsetEncoder encoder = newCharsetEncoder();
-        StackTrace stackTraceWrapper = new StackTrace(stackTraceWriter, trimStackTraces);
-        int bufferMaxLength = estimateBufferLength(
-                eventType.getOpcode().length(),
-                null,
-                encoder,
-                0,
-                0,
-                stackTraceWrapper.message,
-                stackTraceWrapper.smartTrimmedStackTrace,
-                stackTraceWrapper.stackTrace);
-        ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
+        try {
+            StackTrace stackTraceWrapper = new StackTrace(stackTraceWriter, trimStackTraces);
+            int bufferMaxLength = estimateBufferLength(
+                    eventType.getOpcode().length(),
+                    null,
+                    encoder,
+                    0,
+                    0,
+                    stackTraceWrapper.message,
+                    stackTraceWrapper.smartTrimmedStackTrace,
+                    stackTraceWrapper.stackTrace);
+            ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
 
-        encodeHeader(result, eventType);
-        encodeCharset(result);
-        encode(encoder, result, stackTraceWrapper);
-        write(result, sync);
+            encodeHeader(result, eventType);
+            encodeCharset(result);
+            encode(encoder, result, stackTraceWrapper);
+            write(result, sync);
+        } finally {
+            returnCharsetEncoder(encoder);
+        }
     }
 
     // example
@@ -337,59 +351,70 @@ public class EventChannelEncoder extends EventEncoder implements MasterProcessCh
         StackTrace stackTraceWrapper = new StackTrace(reportEntry.getStackTraceWriter(), trimStackTraces);
 
         CharsetEncoder encoder = newCharsetEncoder();
+        try {
+            int bufferMaxLength = estimateBufferLength(
+                    operation.getOpcode().length(),
+                    reportEntry.getRunMode(),
+                    encoder,
+                    1,
+                    1,
+                    reportEntry.getSourceName(),
+                    reportEntry.getSourceText(),
+                    reportEntry.getSourceQualifiedName(),
+                    reportEntry.getName(),
+                    reportEntry.getNameText(),
+                    reportEntry.getGroup(),
+                    reportEntry.getMessage(),
+                    stackTraceWrapper.message,
+                    stackTraceWrapper.smartTrimmedStackTrace,
+                    stackTraceWrapper.stackTrace);
 
-        int bufferMaxLength = estimateBufferLength(
-                operation.getOpcode().length(),
-                reportEntry.getRunMode(),
-                encoder,
-                1,
-                1,
-                reportEntry.getSourceName(),
-                reportEntry.getSourceText(),
-                reportEntry.getSourceQualifiedName(),
-                reportEntry.getName(),
-                reportEntry.getNameText(),
-                reportEntry.getGroup(),
-                reportEntry.getMessage(),
-                stackTraceWrapper.message,
-                stackTraceWrapper.smartTrimmedStackTrace,
-                stackTraceWrapper.stackTrace);
+            ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
 
-        ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
+            encodeHeader(result, operation, reportEntry.getRunMode(), reportEntry.getTestRunId());
+            encodeCharset(result);
 
-        encodeHeader(result, operation, reportEntry.getRunMode(), reportEntry.getTestRunId());
-        encodeCharset(result);
+            encodeString(encoder, result, reportEntry.getSourceName());
+            encodeString(encoder, result, reportEntry.getSourceText());
+            encodeString(encoder, result, reportEntry.getSourceQualifiedName());
+            encodeString(encoder, result, reportEntry.getName());
+            encodeString(encoder, result, reportEntry.getNameText());
+            encodeString(encoder, result, reportEntry.getGroup());
+            encodeString(encoder, result, reportEntry.getMessage());
+            encodeInteger(result, reportEntry.getElapsed());
 
-        encodeString(encoder, result, reportEntry.getSourceName());
-        encodeString(encoder, result, reportEntry.getSourceText());
-        encodeString(encoder, result, reportEntry.getSourceQualifiedName());
-        encodeString(encoder, result, reportEntry.getName());
-        encodeString(encoder, result, reportEntry.getNameText());
-        encodeString(encoder, result, reportEntry.getGroup());
-        encodeString(encoder, result, reportEntry.getMessage());
-        encodeInteger(result, reportEntry.getElapsed());
+            encode(encoder, result, stackTraceWrapper);
 
-        encode(encoder, result, stackTraceWrapper);
-
-        return result;
+            return result;
+        } finally {
+            returnCharsetEncoder(encoder);
+        }
     }
 
     ByteBuffer encodeMessage(
             ForkedProcessEventType eventType, RunMode runMode, Long testRunId, String message, String stackCall) {
         CharsetEncoder encoder = newCharsetEncoder();
-        int bufferMaxLength =
-                estimateBufferLength(eventType.getOpcode().length(), runMode, encoder, 0, 1, message, stackCall);
-        ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
-        encode(encoder, result, eventType, runMode, testRunId, message, stackCall);
-        return result;
+        try {
+            int bufferMaxLength =
+                    estimateBufferLength(eventType.getOpcode().length(), runMode, encoder, 0, 1, message, stackCall);
+            ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
+            encode(encoder, result, eventType, runMode, testRunId, message, stackCall);
+            return result;
+        } finally {
+            returnCharsetEncoder(encoder);
+        }
     }
 
     ByteBuffer encodeMessage(ForkedProcessEventType eventType, String message) {
         CharsetEncoder encoder = newCharsetEncoder();
-        int bufferMaxLength = estimateBufferLength(eventType.getOpcode().length(), null, encoder, 0, 0, message);
-        ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
-        encode(encoder, result, eventType, message);
-        return result;
+        try {
+            int bufferMaxLength = estimateBufferLength(eventType.getOpcode().length(), null, encoder, 0, 0, message);
+            ByteBuffer result = ByteBuffer.allocate(bufferMaxLength);
+            encode(encoder, result, eventType, message);
+            return result;
+        } finally {
+            returnCharsetEncoder(encoder);
+        }
     }
 
     private static String toStackTrace(StackTraceWriter stw, boolean trimStackTraces) {

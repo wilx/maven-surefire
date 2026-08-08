@@ -32,6 +32,8 @@ import static org.apache.maven.surefire.api.booter.Constants.DEFAULT_STREAM_ENCO
 import static org.apache.maven.surefire.api.booter.Constants.MAGIC_NUMBER_FOR_EVENTS_BYTES;
 
 public class EventEncoder extends AbstractStreamEncoder<ForkedProcessEventType> {
+    private static final ThreadLocal<CharsetEncoder> CHARSET_ENCODER = new ThreadLocal<>();
+
     public EventEncoder(WritableBufferedByteChannel out) {
         super(out);
     }
@@ -63,6 +65,15 @@ public class EventEncoder extends AbstractStreamEncoder<ForkedProcessEventType> 
     @Nonnull
     @Override
     protected final CharsetEncoder newCharsetEncoder() {
-        return getCharset().newEncoder();
+        CharsetEncoder encoder = CHARSET_ENCODER.get();
+        CHARSET_ENCODER.remove();
+        if (encoder == null || !encoder.charset().equals(getCharset())) {
+            encoder = getCharset().newEncoder();
+        }
+        return encoder;
+    }
+
+    protected final void returnCharsetEncoder(@Nonnull CharsetEncoder encoder) {
+        CHARSET_ENCODER.set(encoder.reset());
     }
 }
